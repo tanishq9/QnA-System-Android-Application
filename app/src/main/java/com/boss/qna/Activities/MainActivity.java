@@ -57,7 +57,9 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String ANSWER_URL = "http://192.168.1.4:3000/getAnswers";
     private static final String PDF_CONTENT_URL = "http://192.168.1.4:3000/uploadPDFContentAndroid";
+    private static final String TXT_CONTENT_URL = "http://192.168.1.4:3000/uploadTXTContentAndroid";
     private static final String MANUAL_QUESTION_URL = "http://192.168.1.4:3000/uploadManualQuestionAndroid";
+    private static final String TXT_QUESTION_URL = "http://192.168.1.4:3000/uploadTXTQuestionAndroid";
     private static final int CONTENT_CODE = 111;
     private static final int QUESTION_CODE = 333;
     Toolbar toolbar;
@@ -72,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
     AnswerAdapter answerAdapter;
     ArrayList<Question> questionsArrayList;
     ArrayList<Answer> answerArrayList;
+    AlertDialog dialogChooser;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                     // Set Type of TextViews inside the dialogView
                     addManuallyText.setTypeface(tf);
                     chooseFileText.setTypeface(tf);
-                    final AlertDialog.Builder alertChooser = new AlertDialog.Builder(MainActivity.this);
+                    AlertDialog.Builder alertChooser = new AlertDialog.Builder(MainActivity.this);
                     // this is set the view from XML inside AlertDialog
                     alertChooser.setView(dialogView);
                     // disallow cancel of AlertDialog on click of back button and outside touch
@@ -138,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
-                    final AlertDialog dialogChooser = alertChooser.create();
+                    dialogChooser = alertChooser.create();
                     dialogChooser.show();
 
                     addManually.setOnClickListener(new View.OnClickListener() {
@@ -217,14 +220,21 @@ public class MainActivity extends AppCompatActivity {
                             dialogQuestion.show();
                         }
                     });
+
+                    chooseFile.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            // Request storage permission if not asked already else upload the questions
+                            if (ContextCompat.checkSelfPermission(MainActivity.this,
+                                    Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                                upload("questionChosen");
+                            } else {
+                                requestStoragePermission(QUESTION_CODE);
+                            }
+                        }
+                    });
                 } else {
-                    // Request storage permission if not asked already else upload the questions
-                    if (ContextCompat.checkSelfPermission(MainActivity.this,
-                            Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                        upload("question");
-                    } else {
-                        requestStoragePermission(QUESTION_CODE);
-                    }
+                    upload("questionManual");
                 }
             }
         });
@@ -236,80 +246,90 @@ public class MainActivity extends AppCompatActivity {
                 if (textContent.getText().toString().equals("No File Chosen") || textQuestion.getText().toString().equals("No File Chosen")) {
                     Toast.makeText(MainActivity.this, "Upload all files", Toast.LENGTH_SHORT).show();
                 } else {
-                    // Show Progress
-                    progressDialog = new ProgressDialog(MainActivity.this);
-                    progressDialog.setTitle("Processing");
-                    progressDialog.setMessage("Please Wait ...");
-                    progressDialog.show();
-                    Log.e("KEY", "Button Clicked");
-                    OkHttpClient.Builder builder = new OkHttpClient.Builder();
-                    builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
-                            .writeTimeout(10, TimeUnit.MINUTES) // write timeout
-                            .readTimeout(10, TimeUnit.MINUTES); // read timeout
-
-                    OkHttpClient client = builder.build();
-
-                    Request request = new Request.Builder()
-                            .url(ANSWER_URL)
-                            .build();
-
-                    client.newCall(request).enqueue(new Callback() {
+                    Thread thread = new Thread(new Runnable() {
                         @Override
-                        public void onFailure(Call call, IOException e) {
-                            // Hide Progress
-                            progressDialog.dismiss();
-                            Log.e("KEY", String.valueOf(e));
-                            call.cancel();
-                        }
-
-                        @Override
-                        public void onResponse(Call call, final Response response) throws IOException {
-                            // Hide Progress
-                            progressDialog.dismiss();
-                            final String myResponse = response.body().string();
-                            Log.e("KEY", myResponse);
+                        public void run() {
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
-                                    // JSON Response
-                                    try {
-                                        JSONObject jsonObject = new JSONObject(myResponse);
-                                        Log.e("JS0N", jsonObject.length() + "");
-                                        // update answers arraylist
-                                        for (int i = 1; i < jsonObject.length(); i += 2) {
-                                            answerArrayList.add(new Answer((String) jsonObject.get(i + "")));
+                                    progressDialog = new ProgressDialog(MainActivity.this);
+                                    progressDialog.setTitle("Processing");
+                                    progressDialog.setMessage("Please Wait ...");
+                                    progressDialog.setCancelable(false);
+                                    progressDialog.show();
+
+                                    OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                                    builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                                            .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                                            .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                                    OkHttpClient client = builder.build();
+
+                                    Request request = new Request.Builder()
+                                            .url(ANSWER_URL)
+                                            .build();
+
+                                    client.newCall(request).enqueue(new Callback() {
+                                        @Override
+                                        public void onFailure(Call call, IOException e) {
+                                            // Hide Progress
+                                            progressDialog.dismiss();
+                                            Log.e("KEY", String.valueOf(e));
+                                            call.cancel();
                                         }
 
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
-                                    // update the adapter
-                                    answerAdapter = new AnswerAdapter(answerArrayList);
-                                    // inflate dialog box
-                                    final View answerView = getLayoutInflater().inflate(R.layout.answer_display_layout, null, false);
-                                    RecyclerView answerRecyclerView = answerView.findViewById(R.id.rvans);
-                                    answerRecyclerView.setAdapter(answerAdapter);
-                                    answerRecyclerView.setLayoutManager(new LinearLayoutManager(MainActivity.this, LinearLayoutManager.VERTICAL, false));
-                                    // Alert Dialog Box
-                                    final AlertDialog.Builder alertAnswer = new AlertDialog.Builder(MainActivity.this);
-                                    // this is set the view from XML inside AlertDialog
-                                    alertAnswer.setView(answerView);
-                                    alertAnswer.setTitle("Answers");
-                                    // disallow cancel of AlertDialog on click of back button and outside touch
-                                    alertAnswer.setCancelable(false);
-                                    alertAnswer.setNegativeButton("Ok", new DialogInterface.OnClickListener() {
                                         @Override
-                                        public void onClick(DialogInterface dialog, int which) {
-                                            // Cancel implies user doesn't want to add questions
-                                            answerArrayList.clear();
+                                        public void onResponse(Call call, final Response response) throws IOException {
+                                            // Hide Progress
+                                            progressDialog.dismiss();
+                                            final String myResponse = response.body().string();
+                                            Log.e("KEY", myResponse);
+                                            runOnUiThread(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    // JSON Response
+                                                    try {
+                                                        JSONObject jsonObject = new JSONObject(myResponse);
+                                                        Log.e("JS0N", jsonObject.length() + "");
+                                                        // update answers arraylist
+                                                        for (int i = 1; i < jsonObject.length(); i += 2) {
+                                                            answerArrayList.add(new Answer((String) jsonObject.get(i + "")));
+                                                        }
+                                                    } catch (JSONException e) {
+                                                        e.printStackTrace();
+                                                    }
+                                                    // update the adapter
+                                                    answerAdapter = new AnswerAdapter(answerArrayList);
+                                                    // inflate dialog box
+                                                    final View answerView = getLayoutInflater().inflate(R.layout.answer_display_layout, null, false);
+                                                    RecyclerView answerRecyclerView = answerView.findViewById(R.id.rvans);
+                                                    answerRecyclerView.setAdapter(answerAdapter);
+                                                    answerRecyclerView.setLayoutManager(new LinearLayoutManager(MainActivity.this, LinearLayoutManager.VERTICAL, false));
+                                                    // Alert Dialog Box
+                                                    final AlertDialog.Builder alertAnswer = new AlertDialog.Builder(MainActivity.this);
+                                                    // this is set the view from XML inside AlertDialog
+                                                    alertAnswer.setView(answerView);
+                                                    alertAnswer.setTitle("Answers");
+                                                    // disallow cancel of AlertDialog on click of back button and outside touch
+                                                    alertAnswer.setCancelable(false);
+                                                    alertAnswer.setNegativeButton("Ok", new DialogInterface.OnClickListener() {
+                                                        @Override
+                                                        public void onClick(DialogInterface dialog, int which) {
+                                                            // Cancel implies user doesn't want to add questions
+                                                            answerArrayList.clear();
+                                                        }
+                                                    });
+                                                    final AlertDialog dialogAnswer = alertAnswer.create();
+                                                    dialogAnswer.show();
+                                                }
+                                            });
                                         }
                                     });
-                                    final AlertDialog dialogAnswer = alertAnswer.create();
-                                    dialogAnswer.show();
                                 }
                             });
                         }
                     });
+                    thread.start();
                 }
             }
         });
@@ -390,20 +410,28 @@ public class MainActivity extends AppCompatActivity {
                     .withActivity(MainActivity.this)
                     .withRequestCode(CONTENT_CODE)
                     .start();
-
-        } else if (type.equals("question")) {
-
-            progressDialog = new ProgressDialog(MainActivity.this);
-            progressDialog.setTitle("Uploading Question File");
-            progressDialog.setMessage("Please Wait ...");
-            progressDialog.show();
-
+        } else if (type.equals("questionManual")) {
             // Upload PDF file using a background thread
             Thread thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            progressDialog = new ProgressDialog(MainActivity.this);
+                            progressDialog.setTitle("Uploading Question File");
+                            progressDialog.setMessage("Please Wait ...");
+                            progressDialog.setCancelable(false);
+                            progressDialog.show();
+                        }
+                    });
 
-                    OkHttpClient okHttpClient = new OkHttpClient();
+                    OkHttpClient.Builder okhttpBuilder = new OkHttpClient.Builder();
+                    okhttpBuilder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                            .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                            .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                    OkHttpClient client = okhttpBuilder.build();
 
                     // Initialize Builder (not RequestBody)
                     FormBody.Builder builder = new FormBody.Builder();
@@ -423,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
                             .post(requestBody)
                             .build();
 
-                    okHttpClient.newCall(request).enqueue(new Callback() {
+                    client.newCall(request).enqueue(new Callback() {
                         @Override
                         public void onFailure(Call call, IOException e) {
                             Log.e("ERROR OKHTTP", String.valueOf(e));
@@ -447,10 +475,14 @@ public class MainActivity extends AppCompatActivity {
                             question.setAlpha(.5f);
                         }
                     });
-
                 }
             });
             thread.start();
+        } else if (type.equals("questionChosen")) {
+            new MaterialFilePicker()
+                    .withActivity(MainActivity.this)
+                    .withRequestCode(QUESTION_CODE)
+                    .start();
         }
     }
 
@@ -459,12 +491,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable final Intent data) {
         if (requestCode == CONTENT_CODE && resultCode == RESULT_OK) {
 
-            progressDialog = new ProgressDialog(MainActivity.this);
-            progressDialog.setTitle("Uploading Content File");
-            progressDialog.setMessage("Please Wait ...");
-            progressDialog.show();
-
-            // Upload PDF file using a background thread
+            // Upload Content file using a background thread
             Thread thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -474,53 +501,211 @@ public class MainActivity extends AppCompatActivity {
 
                     final String file_path = file.getAbsolutePath();
                     Log.e("PATH", file_path);
-                    // Concatenate white spaces otherwise error will prompt and app will crash
-                    OkHttpClient okHttpClient = new OkHttpClient();
-                    RequestBody file_body = RequestBody.create(MediaType.parse("application/pdf"), file);
+                    String extension = file_path.substring(file_path.length() - 3);
+                    Log.e("PATH", extension);
+                    if (extension.equals("pdf") || extension.equals("PDF")) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                progressDialog = new ProgressDialog(MainActivity.this);
+                                progressDialog.setTitle("Uploading Content File");
+                                progressDialog.setMessage("Please Wait ...");
+                                progressDialog.setCancelable(false);
+                                progressDialog.show();
+                            }
+                        });
 
-                    Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
+                        // Concatenate white spaces otherwise error will prompt and app will crash
+                        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                        builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                                .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                                .readTimeout(10, TimeUnit.MINUTES); // read timeout
 
-                    RequestBody request_body = new MultipartBody.Builder()
-                            .setType(MultipartBody.FORM)
-                            .addFormDataPart("type", "application/pdf")
-                            .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
-                            .build();
+                        OkHttpClient client = builder.build();
+                        RequestBody file_body = RequestBody.create(MediaType.parse("application/pdf"), file);
 
-                    Request request = new Request.Builder()
-                            .url(PDF_CONTENT_URL)
-                            .post(request_body)
-                            .build();
+                        Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
 
-                    okHttpClient.newCall(request).enqueue(new Callback() {
-                        @Override
-                        public void onFailure(Call call, IOException e) {
-                            Log.e("ERROR OKHTTP", String.valueOf(e));
-                            progressDialog.dismiss();
-                        }
+                        RequestBody request_body = new MultipartBody.Builder()
+                                .setType(MultipartBody.FORM)
+                                .addFormDataPart("type", "application/pdf")
+                                .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
+                                .build();
 
-                        @Override
-                        public void onResponse(Call call, final Response response) throws IOException {
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Toast.makeText(MainActivity.this, "File Uploaded Successfully", Toast.LENGTH_LONG).show();
-                                }
-                            });
-                            final String myResponse = response.body().string();
-                            Log.e("RESPONSE OKHTTP", myResponse);
-                            progressDialog.dismiss();
-                            // Change Content TextView, change Button Text and Disable it
-                            textContent.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
-                            content.setText("CONTENT UPLOADED");
-                            content.setClickable(false);
-                            content.setAlpha(.5f);
-                        }
-                    });
+                        Request request = new Request.Builder()
+                                .url(PDF_CONTENT_URL)
+                                .post(request_body)
+                                .build();
 
+                        client.newCall(request).enqueue(new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                Log.e("ERROR OKHTTP", String.valueOf(e));
+                                progressDialog.dismiss();
+                            }
 
+                            @Override
+                            public void onResponse(Call call, final Response response) throws IOException {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(MainActivity.this, "PDF File Uploaded Successfully", Toast.LENGTH_LONG).show();
+                                    }
+                                });
+                                final String myResponse = response.body().string();
+                                Log.e("RESPONSE OKHTTP", myResponse);
+                                progressDialog.dismiss();
+                                // Change Content TextView, change Button Text and Disable it
+                                textContent.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
+                                content.setText("CONTENT UPLOADED");
+                                content.setClickable(false);
+                                content.setAlpha(.5f);
+                            }
+                        });
+                    } else if (extension.equals("txt") || extension.equals("TXT")) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                progressDialog = new ProgressDialog(MainActivity.this);
+                                progressDialog.setTitle("Uploading Content File");
+                                progressDialog.setMessage("Please Wait ...");
+                                progressDialog.setCancelable(false);
+                                progressDialog.show();
+                            }
+                        });
+
+                        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                        builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                                .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                                .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                        OkHttpClient client = builder.build();
+                        RequestBody file_body = RequestBody.create(MediaType.parse("text/plain"), file);
+
+                        Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
+
+                        RequestBody request_body = new MultipartBody.Builder()
+                                .setType(MultipartBody.FORM)
+                                .addFormDataPart("type", "text/plain")
+                                .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
+                                .build();
+
+                        Request request = new Request.Builder()
+                                .url(TXT_CONTENT_URL)
+                                .post(request_body)
+                                .build();
+
+                        client.newCall(request).enqueue(new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                Log.e("ERROR OKHTTP", String.valueOf(e));
+                                progressDialog.dismiss();
+                            }
+
+                            @Override
+                            public void onResponse(Call call, final Response response) throws IOException {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(MainActivity.this, "Text File Uploaded Successfully", Toast.LENGTH_LONG).show();
+                                    }
+                                });
+                                final String myResponse = response.body().string();
+                                Log.e("RESPONSE OKHTTP", myResponse);
+                                progressDialog.dismiss();
+                                // Change Content TextView, change Button Text and Disable it
+                                textContent.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
+                                content.setText("CONTENT UPLOADED");
+                                content.setClickable(false);
+                                content.setAlpha(.5f);
+                            }
+                        });
+                    } else {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "File Format Not Supported", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
                 }
             });
             thread.start();
+        } else if (requestCode == QUESTION_CODE && resultCode == RESULT_OK) {
+            File file = new File(data.getStringExtra(FilePickerActivity.RESULT_FILE_PATH));
+            // String content_type = getMimeType(file.getPath());
+
+            final String file_path = file.getAbsolutePath();
+            Log.e("PATH", file_path);
+            String extension = file_path.substring(file_path.length() - 3);
+            Log.e("PATH", extension);
+            if (extension.equals("txt") || extension.equals("TXT")) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        progressDialog = new ProgressDialog(MainActivity.this);
+                        progressDialog.setTitle("Uploading Content File");
+                        progressDialog.setMessage("Please Wait ...");
+                        progressDialog.setCancelable(false);
+                        progressDialog.show();
+                    }
+                });
+
+                OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                        .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                        .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                OkHttpClient client = builder.build();
+                RequestBody file_body = RequestBody.create(MediaType.parse("text/plain"), file);
+
+                Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
+
+                RequestBody request_body = new MultipartBody.Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart("type", "text/plain")
+                        .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
+                        .build();
+
+                Request request = new Request.Builder()
+                        .url(TXT_QUESTION_URL)
+                        .post(request_body)
+                        .build();
+
+                client.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        Log.e("ERROR OKHTTP", String.valueOf(e));
+                        progressDialog.dismiss();
+                    }
+
+                    @Override
+                    public void onResponse(Call call, final Response response) throws IOException {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Text File Uploaded Successfully", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                        final String myResponse = response.body().string();
+                        Log.e("RESPONSE OKHTTP", myResponse);
+                        progressDialog.dismiss();
+                        textQuestion.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
+                        question.setText("QUESTIONS UPLOADED");
+                        question.setClickable(false);
+                        question.setAlpha(.5f);
+                        // Also dismiss the chooser option dialog
+                        dialogChooser.dismiss();
+                    }
+                });
+            } else {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "File Format Not Supported", Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
         }
     }
 
