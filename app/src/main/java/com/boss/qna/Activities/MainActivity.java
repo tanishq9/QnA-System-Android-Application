@@ -55,11 +55,16 @@ import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String ANSWER_URL = "http://192.168.1.4:3000/getAnswers";
-    private static final String PDF_CONTENT_URL = "http://192.168.1.4:3000/uploadPDFContentAndroid";
-    private static final String TXT_CONTENT_URL = "http://192.168.1.4:3000/uploadTXTContentAndroid";
-    private static final String MANUAL_QUESTION_URL = "http://192.168.1.4:3000/uploadManualQuestionAndroid";
-    private static final String TXT_QUESTION_URL = "http://192.168.1.4:3000/uploadTXTQuestionAndroid";
+    private static final String IP = "http://192.168.1.4:3000";
+
+    private static final String ANSWER_URL = IP + "/getAnswers";
+    private static final String PDF_CONTENT_URL = IP + "/uploadPDFContentAndroid";
+    private static final String TXT_CONTENT_URL = IP + "/uploadTXTContentAndroid";
+    private static final String DOCX_CONTENT_URL = IP + "/uploadDOCXContentAndroid";
+    private static final String MANUAL_QUESTION_URL = IP + "/uploadManualQuestionAndroid";
+    private static final String TXT_QUESTION_URL = IP + "/uploadTXTQuestionAndroid";
+    private static final String DOCX_QUESTION_URL = IP + "/uploadDOCXQuestionAndroid";
+
     private static final int CONTENT_CODE = 111;
     private static final int QUESTION_CODE = 333;
     Toolbar toolbar;
@@ -620,6 +625,64 @@ public class MainActivity extends AppCompatActivity {
                                 content.setAlpha(.5f);
                             }
                         });
+                    } else if (extension.equals("ocx") || extension.equals("OCX")) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                progressDialog = new ProgressDialog(MainActivity.this);
+                                progressDialog.setTitle("Uploading Content File");
+                                progressDialog.setMessage("Please Wait ...");
+                                progressDialog.setCancelable(false);
+                                progressDialog.show();
+                            }
+                        });
+
+                        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                        builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                                .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                                .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                        OkHttpClient client = builder.build();
+                        RequestBody file_body = RequestBody.create(MediaType.parse("application/vnd.openxmlformats-officedocument.wordprocessingml.document"), file);
+
+                        Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
+
+                        RequestBody request_body = new MultipartBody.Builder()
+                                .setType(MultipartBody.FORM)
+                                .addFormDataPart("type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                                .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
+                                .build();
+
+                        Request request = new Request.Builder()
+                                .url(DOCX_CONTENT_URL)
+                                .post(request_body)
+                                .build();
+
+                        client.newCall(request).enqueue(new Callback() {
+                            @Override
+                            public void onFailure(Call call, IOException e) {
+                                Log.e("ERROR OKHTTP", String.valueOf(e));
+                                progressDialog.dismiss();
+                            }
+
+                            @Override
+                            public void onResponse(Call call, final Response response) throws IOException {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(MainActivity.this, "Docx File Uploaded Successfully", Toast.LENGTH_LONG).show();
+                                    }
+                                });
+                                final String myResponse = response.body().string();
+                                Log.e("RESPONSE OKHTTP", myResponse);
+                                progressDialog.dismiss();
+                                // Change Content TextView, change Button Text and Disable it
+                                textContent.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
+                                content.setText("CONTENT UPLOADED");
+                                content.setClickable(false);
+                                content.setAlpha(.5f);
+                            }
+                        });
                     } else {
                         runOnUiThread(new Runnable() {
                             @Override
@@ -685,6 +748,65 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void run() {
                                 Toast.makeText(MainActivity.this, "Text File Uploaded Successfully", Toast.LENGTH_LONG).show();
+                            }
+                        });
+                        final String myResponse = response.body().string();
+                        Log.e("RESPONSE OKHTTP", myResponse);
+                        progressDialog.dismiss();
+                        textQuestion.setText(file_path.substring(file_path.lastIndexOf("/") + 1));
+                        question.setText("QUESTIONS UPLOADED");
+                        question.setClickable(false);
+                        question.setAlpha(.5f);
+                        // Also dismiss the chooser option dialog
+                        dialogChooser.dismiss();
+                    }
+                });
+            } else if (extension.equals("ocx") || extension.equals("OCX")) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        progressDialog = new ProgressDialog(MainActivity.this);
+                        progressDialog.setTitle("Uploading Content File");
+                        progressDialog.setMessage("Please Wait ...");
+                        progressDialog.setCancelable(false);
+                        progressDialog.show();
+                    }
+                });
+
+                OkHttpClient.Builder builder = new OkHttpClient.Builder();
+                builder.connectTimeout(10, TimeUnit.MINUTES) // connect timeout
+                        .writeTimeout(10, TimeUnit.MINUTES) // write timeout
+                        .readTimeout(10, TimeUnit.MINUTES); // read timeout
+
+                OkHttpClient client = builder.build();
+                RequestBody file_body = RequestBody.create(MediaType.parse("application/vnd.openxmlformats-officedocument.wordprocessingml.document"), file);
+
+                Log.e("File Name", file_path.substring(file_path.lastIndexOf("/") + 1));
+
+                RequestBody request_body = new MultipartBody.Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart("type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        .addFormDataPart("file-name", file_path.substring(file_path.lastIndexOf("/") + 1), file_body)
+                        .build();
+
+                Request request = new Request.Builder()
+                        .url(DOCX_QUESTION_URL)
+                        .post(request_body)
+                        .build();
+
+                client.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        Log.e("ERROR OKHTTP", String.valueOf(e));
+                        progressDialog.dismiss();
+                    }
+
+                    @Override
+                    public void onResponse(Call call, final Response response) throws IOException {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Docx File Uploaded Successfully", Toast.LENGTH_LONG).show();
                             }
                         });
                         final String myResponse = response.body().string();
